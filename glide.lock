@@ -1,0 +1,18 @@
+hash: dd5e3281a0212ff8d5e8bdddd76a0b2393e0b98ff630df808ba214a9ada0e267
+updated: 2018-01-03T23:59:50.770087347+07:00
+imports:
+- name: github.com/go-sql-driver/mysql
+  version: 3955978caca48c1658a4bb7a9c6a0f084e326af3
+- name: github.com/jinzhu/gorm
+  version: 5174cc5c242a728b435ea2be8a2f7f998e15429b
+  subpackages:
+  - dialects/mysql
+- name: github.com/jinzhu/inflection
+  version: 1c35d901db3da928c72a72d8458480cc9ade058f
+- name: github.com/PuerkitoBio/fetchbot
+  version: 61eb5a10440a8313c73a7ff88602380872bff2ce
+- name: github.com/spf13/viper
+  version: 25b30aa063fc18e48662b86996252eabdcf2f0c7
+- name: github.com/temoto/robotstxt-go
+  version: 9e4646fa705336d5b2fa9dddfafbe0a1a965acd7
+testImports: []

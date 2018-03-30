@@ -1,0 +1,9 @@
+package: indonesian-schools-data
+import:
+- package: github.com/PuerkitoBio/fetchbot
+  version: ^1.1.2
+- package: github.com/temoto/robotstxt-go
+- package: github.com/jinzhu/gorm
+  version: ~1.0.0
+- package: github.com/spf13/viper
+  version: ~1.0.0

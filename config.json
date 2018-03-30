@@ -1,0 +1,8 @@
+{
+    "RESOURCE_URL": "http://referensi.data.kemdikbud.go.id/index11.php?kode=%s&level=3",
+    "DB_USER": "root",
+    "DB_PASSWORD": "pass",
+    "DB_HOST": "localhost",
+    "DB_PORT": "3306",
+    "DB_DATABASE": "indonesian-schools-data"
+}
