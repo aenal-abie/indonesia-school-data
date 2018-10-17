@@ -21,6 +21,7 @@ var (
 	mu               sync.Mutex
 	resourceUrl      string
 	connectionString string
+	err              error
 )
 
 // Duplicates table
@@ -57,13 +58,11 @@ func loadConfig() {
 }
 
 func openDatabase() {
-	db, err := gorm.Open("mysql", connectionString)
+	db, err = gorm.Open("mysql", connectionString)
 
 	if err != nil {
 		panic("Cannot connect to database: " + err.Error())
 	}
-
-	defer db.Close()
 
 }
 
@@ -74,6 +73,7 @@ func main() {
 	updateProvince := flag.Bool("update-provinces", false, "refetch provinces data")
 	updateRegency := flag.Bool("update-regencies", false, "refetch regencies data")
 	updateDistrict := flag.Bool("update-districts", false, "refetch disctricts data")
+	startFromDistrict := flag.String("start-from-district", "", "start from district id to recrawl")
 
 	flag.Parse()
 
@@ -85,13 +85,15 @@ func main() {
 		viper.Get("DB_DATABASE"),
 	)
 
-	db, err := gorm.Open("mysql", connectionString)
+	openDatabase()
 
-	if err != nil {
-		panic("Cannot connect to database: " + err.Error())
-	}
+	// db, err := gorm.Open("mysql", connectionString)
 
-	defer db.Close()
+	// if err != nil {
+	// 	panic("Cannot connect to database: " + err.Error())
+	// }
+
+	// defer db.Close()
 
 	db.AutoMigrate(&School{})
 
@@ -111,15 +113,19 @@ func main() {
 
 	var districts []District
 
-	db, err = gorm.Open("mysql", connectionString)
+	// db, err = gorm.Open("mysql", connectionString)
 
-	defer db.Close()
+	// defer db.Close()
 
-	if err != nil {
-		panic("Cannot connect to database: " + err.Error())
+	// if err != nil {
+	// 	panic("Cannot connect to database: " + err.Error())
+	// }
+	// fmt.Printf("%#v", *startFromDistrict)
+	if *startFromDistrict != "" {
+		db.Where("code >= ?", *startFromDistrict).Find(&districts)
+	} else {
+		db.Find(&districts)
 	}
-
-	db.Find(&districts)
 
 	f := fetchbot.New(fetchbot.HandlerFunc(handler))
 
@@ -132,6 +138,11 @@ func main() {
 		// queue.SendStringGet(url)
 		// resourceUrl = "http://referensi.data.kemdikbud.go.id/index11.php?kode=010101&level=3"
 		_, err = queue.SendStringGet(url)
+		// _, err = queue.SendStringGet(url + "&id=15")
+		// _, err = queue.SendStringGet(url + "&id=16")
+		// _, err = queue.SendStringGet(url + "&id=37")
+		// _, err = queue.SendStringGet(url + "&id=39")
+
 		if err != nil {
 			fmt.Printf("[ERR] GET %s - %s\n", url, err)
 		}
@@ -161,28 +172,40 @@ func handler(ctx *fetchbot.Context, res *http.Response, err error) {
 func queueSingleSchoolData(ctx *fetchbot.Context, doc *goquery.Document) {
 	mu.Lock()
 
-	newF := fetchbot.New(fetchbot.HandlerFunc(getSchollDataHandler))
-	newQueue := newF.Start()
+	// newF := fetchbot.New(fetchbot.HandlerFunc(getSchollDataHandler))
+	// newQueue := newF.Start()
+	kode := parseKode(ctx.Cmd.URL().RequestURI())
+	district := District{}
+
+	db.Where("code = ?", kode).First(&district)
 
 	doc.Find("table td a[title=\"Tampilkan Profil Sekolah\"]").Each(func(i int, s *goquery.Selection) {
 		val, _ := s.Attr("href")
+		school := School{}
+
+		// val = "http://referensi.data.kemdikbud.go.id/tabs.php?npsn=20231720"
+		npsn := parseNPSNFromUrl(val)
+		// os.Exit(1)
+
+		db.Model(&school).Where("id = ?", npsn).Update("district_id", district.ID)
+		fmt.Printf("[UPDATE] %s %s\n", npsn, kode)
 
 		// Resolve address
-		u, err := ctx.Cmd.URL().Parse(val)
-		if err != nil {
-			fmt.Printf("error: resolve URL %s - %s\n", val, err)
-			return
-		}
-		if !dup[u.String()] {
-			if _, err := newQueue.SendStringGet(u.String()); err != nil {
-				fmt.Printf("error: enqueue get %s - %s\n", u, err)
-			} else {
-				dup[u.String()] = true
-			}
-		}
+		// u, err := ctx.Cmd.URL().Parse(val)
+		// if err != nil {
+		// 	fmt.Printf("error: resolve URL %s - %s\n", val, err)
+		// 	return
+		// }
+		// if !dup[u.String()] {
+		// 	if _, err := newQueue.SendStringGet(u.String()); err != nil {
+		// 		fmt.Printf("error: enqueue get %s - %s\n", u, err)
+		// 	} else {
+		// 		dup[u.String()] = true
+		// 	}
+		// }
 	})
 
-	newQueue.Close()
+	// newQueue.Close()
 
 	mu.Unlock()
 }
@@ -203,12 +226,12 @@ func parseSingleSchoolData(doc *goquery.Document) {
 	var district District
 
 	// openDatabase()
-	db, err := gorm.Open("mysql", connectionString)
+	// db, err := gorm.Open("mysql", connectionString)
 
-	if err != nil {
-		panic("Cannot connect to database: " + err.Error())
-	}
-	defer db.Close()
+	// if err != nil {
+	// 	panic("Cannot connect to database: " + err.Error())
+	// }
+	// defer db.Close()
 
 	tableContent := doc.Find("td[width=\"70%\"] table").First().Text()
 
@@ -227,9 +250,13 @@ func parseSingleSchoolData(doc *goquery.Document) {
 	school.Educational_level = parseEducationalLevel(tableContent)
 	school.Village_name = parseVillageName(tableContent)
 
-	if err := db.Where("name = ?", "Kec. "+parseDistrictName(tableContent)).First(&district).Error; err != nil {
+	districtName := parseDistrictName(tableContent)
+	districtName = strings.Replace(districtName, "Kec. ", "", -1)
+
+	if err := db.Where("name = ?", "Kec. "+districtName).First(&district).Error; err != nil {
 		fmt.Printf("Error query: ", err.Error())
 	}
+	fmt.Printf("%#v", districtName, district.ID)
 
 	school.District_id = district.ID
 
@@ -251,6 +278,18 @@ func parseKode(s string) string {
 
 func parseName(s string) string {
 	r := regexp.MustCompile(`Nama\n:\n(` + masterPattern + `)`)
+
+	match := r.FindStringSubmatch(s)
+
+	if len(match) > 1 {
+		return strings.Trim(match[1], " ")
+	}
+
+	return ""
+}
+
+func parseNPSNFromUrl(s string) string {
+	r := regexp.MustCompile(`npsn=(\d+)`)
 
 	match := r.FindStringSubmatch(s)
 
